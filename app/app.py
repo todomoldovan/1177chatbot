@@ -7,11 +7,8 @@ import streamlit as st
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
-#from langchain.llms.ollama import Ollama
-from langchain_community.llms import Ollama
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
@@ -22,36 +19,13 @@ from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 #from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
-from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 #from langchain.vectorstores import FAISS
 from langchain_community.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
 from langchain.llms import HuggingFaceHub
-
-# re-make this to store as array of dicts,
-# to know sources where the text was from
-# MODELS_DB_PAIRS = [
-#     ('all-minilm:latest', '45 MB', 'minilm'),
-#     ('gte-base:latest', '117 MB', 'gte'),
-#     ('nomic-embed-text:latest', '274 MB', 'nomic'),
-#     ('qwen2:0.5b', '352 MB', 'qwen'),
-#     ('tinyllama:latest', '637 MB', 'tinyllama'),
-#     ('mxbai-embed-large:latest', '669 MB', 'mxbai'),
-#     ('gemma:2b-instruct-v1.1-q2_K', '1.2 GB', 'gemma'),
-#     ('phi3:mini-128k', '2.2 GB', 'phimini'),
-#     ('llama3:latest', '4.7 GB', 'llama'),
-# ]
-
-load_dotenv() # gives access to langchain access to api-keys in .env
-DB_NAME = 'minilm'
-EMBEDDING_MODEL_NAME = 'all-minilm:latest'
-CONNECTION = f"postgresql+psycopg://postgres:password@localhost:5432/{DB_NAME}"
-# LLM = HuggingFaceHub(repo_id="google/flan-t5-small", model_kwargs={"temperature": 0.5, "max_length": 512})
-LLM = Ollama(model='llama3:latest', base_url='http://localhost:31415')
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -73,34 +47,18 @@ def get_text_chunks(text):
 
 
 def get_vectorstore(text_chunks):
-    #embeddings = OpenAIEmbeddings()
     embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
 
-# def initialize_empty_conversation():
-#     # Initialize a basic LLM and retriever with empty or placeholder components
-#     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    
-#     # Create an empty vectorstore (FAISS) or a mock retriever
-#     # For demonstration, we're assuming an empty FAISS vectorstore can be created
-#     vectorstore = get_vectorstore()
-    
-#     conversation_chain = ConversationalRetrievalChain.from_llm(
-#         llm=LLM,
-#         retriever=vectorstore.as_retriever(),
-#         memory=memory
-#     )
-#     return conversation_chain
-
-
 def get_conversation_chain(vectorstore):
+    llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
 
-    memory = ConversationBufferMemory(memory_key="chat_history",
-                                      return_messages=True)
+    memory = ConversationBufferMemory(
+        memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
-        llm=LLM,
+        llm=llm,
         retriever=vectorstore.as_retriever(),
         memory=memory
     )
@@ -120,6 +78,8 @@ def handle_userinput(user_question):
 
 
 def main():
+
+    load_dotenv()
 
     st.set_page_config(page_title="Chat with multiple PDFs", page_icon=":pill:")
     st.write(css, unsafe_allow_html=True)
@@ -158,7 +118,7 @@ def main():
                         st.error(f"Error during processing: {str(e)}")
             else:
                 st.warning("Please upload at least one PDF.")
-    #st.session_state.conversation #makes the conversation available outside the scope, and also to not re
+    st.session_state.conversation #makes the conversation available outside the scope, and also to not re
 
 
 if __name__ == '__main__':
