@@ -17,7 +17,6 @@ load_dotenv()
 # Access the environment variables
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
-
 # Streamlit app
 st.subheader('Summarize Document')
 
