@@ -8,7 +8,7 @@ import chromadb
 import json
 
 
-os.environ["GEMINI_API_KEY"]="AIzaSyDPiaGSPG-FGbM3bg5V5tpvrp1RPifjEgA"
+os.environ["GEMINI_API_KEY"]="yourkeeey"
 
 def load_pdf(file_path):
     # Logic to read pdf
