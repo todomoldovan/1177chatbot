@@ -7,6 +7,7 @@ Final project for 1RT730 Large Language Models and Societal Consequences of Arti
 3. Create a virtual environment using conda
 4. run ``` pip install -r requirements.txt```
 5. run ``` streamlit run app/app_gemini.py```
+
 The creation of the database can take a few minutes so please be patient.
 
 # Scraping
