@@ -84,6 +84,11 @@ def typing_effect(text, delay=0.05):
 
     placeholder.markdown(text)
 
+def load_avatar(image_path, size=(40, 40)):
+    img = Image.open(image_path)
+    img = img.resize(size)
+    return img
+
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -166,7 +171,7 @@ if prompt := st.chat_input("What symptoms do you have?"):
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
         st.markdown(prompt)
 
     try:
@@ -189,7 +194,7 @@ if prompt := st.chat_input("What symptoms do you have?"):
             f"User question: {prompt}"
         ])
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
             typing_effect(response.text)
         
         st.divider()
