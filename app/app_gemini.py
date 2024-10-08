@@ -8,6 +8,7 @@ import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
 import re
 from pypdf import PdfReader
+import requests
 
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
@@ -50,8 +51,6 @@ def create_chroma_db():
 
     existing_collections = chroma_client.list_collections()
     name = "rag_experiment"
-
-    #print("all dbs: ", chroma_client.list_collections())
 
     if any(collection.name == name for collection in existing_collections):
         chroma_client.delete_collection(name=name)
@@ -98,39 +97,47 @@ if prompt := st.chat_input("What symptoms do you have?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Retrieve relevant documents from ChromaDB
-    results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
+    try:
+        # Retrieve relevant documents from ChromaDB
+        results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
 
-    context = ""
-    references = []
-    for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
-        context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
-        references.append({
-            'title': metadata['title'],
-            'url': metadata['url']
-    })
+        context = ""
+        references = []
+        for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
+            context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
+            references.append({
+                'title': metadata['title'],
+                'url': metadata['url']
+        })
 
-    response = model.generate_content([
-    "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
-    f"Context: {context}",
-    f"User question: {prompt}"
-    ])
+        # Generate response using the Gemini API
+        response = model.generate_content([
+            "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
+            f"Context: {context}",
+            f"User question: {prompt}"
+        ])
 
-    with st.chat_message("assistant"):
-        st.markdown(response.text)
+        with st.chat_message("assistant"):
+            st.markdown(response.text)
+        
+        st.divider()
+        st.markdown("**References:**")
+        for i, ref in enumerate(references, 1):
+            st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
+
+        # Append the assistant's response to the messages
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
+        })
     
-    st.divider()
-    st.markdown("**References:**")
-    for i, ref in enumerate(references, 1):
-        st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
-
-    # Append the assistant's response to the messages
-    st.session_state.messages.append({
-        "role": "assistant", 
-        "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
-    })
-
-    
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 500:
+            st.error("An internal server error occurred (500). Please try again later.")
+            print(f"500 error: {e}")
+        else:
+            st.error(f"An error occurred: {e}")
+            print(f"Error: {e}")
 
     end_time = time.time()
     elapsed_time = end_time - start_time

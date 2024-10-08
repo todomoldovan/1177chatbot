@@ -8,7 +8,6 @@ client = chromadb.Client()
 # Define the collection for storing contacts
 collection = client.get_or_create_collection(name="contacts")
 
-
 # Streamlit page setup
 st.set_page_config(layout="wide")
 st.title("Contact Form")
@@ -30,7 +29,7 @@ if st.button("Send"):
             collection.add(
                 documents=[message],
                 metadatas=[{"name": name}],
-                ids=[name]  # Use email as a unique identifier
+                ids=[name]  # Use name as a unique identifier
             )
             st.success("Message sent successfully!")
 
