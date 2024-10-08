@@ -10,11 +10,59 @@ import re
 from pypdf import PdfReader
 import requests
 import pandas as pd
+<<<<<<< HEAD
 import google.api_core.exceptions 
+=======
+from PIL import Image
+import base64
+from streamlit_option_menu import option_menu
+from streamlit_extras.switch_page_button import switch_page
+>>>>>>> 5a3f8b0dead67cfb8222b05a0b0b0e214b974680
 
-st.set_page_config(page_title="Ask1177")
+st.set_page_config(page_title="Ask1177", page_icon=":pill:")
 
 st.markdown(f'<style>{open("app/style.css").read()}</style>', unsafe_allow_html=True)
+
+def navigation_bar():
+    with st.container():
+        selected = option_menu(
+            menu_title=None,
+            options=["Home", "Upload", "Analytics", 'Settings', 'Contact'],
+            icons=['house', 'cloud-upload', "graph-up-arrow", 'gear', 'phone'],
+            menu_icon="cast",
+            orientation="horizontal",
+            styles={
+                "nav-link": {
+                    "text-align": "left",
+                    "--hover-color": "#eee",
+                }
+            }
+        )
+        if selected == "Analytics":
+            switch_page("Analytics")
+        if selected == "Contact":
+            switch_page("Contact")
+
+# Function to load and encode the image
+def img_to_base64(img_path):
+    with open(img_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+# Path to your image
+img_path = "app/images/1177_logo.png"
+
+# Encode the image
+encoded_img = img_to_base64(img_path)
+
+st.header("Ask1177 :pill: ", divider="gray")
+
+# image = Image.open('path/to/your/image.png')
+# st.image(image, width=200)
+
+
+st.divider()
+st.caption("*Disclaimer:* This application was trained on data scraped from 1177.se. The chatbot should assist in getting health advice, but always remember, that it can not replace a doctor. It is a student project and not officially hosted by 1177.se.")
+st.divider()
 
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
