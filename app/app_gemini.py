@@ -16,59 +16,8 @@ import base64
 from streamlit_option_menu import option_menu
 from streamlit_extras.switch_page_button import switch_page
 
-st.set_page_config(page_title="Ask1177", page_icon=":pill:")
-
-st.markdown(f'<style>{open("app/style.css").read()}</style>', unsafe_allow_html=True)
-
-def navigation_bar():
-    with st.container():
-        selected = option_menu(
-            menu_title=None,
-            options=["Home", "Upload", "Analytics", 'Settings', 'Contact'],
-            icons=['house', 'cloud-upload', "graph-up-arrow", 'gear', 'phone'],
-            menu_icon="cast",
-            orientation="horizontal",
-            styles={
-                "nav-link": {
-                    "text-align": "left",
-                    "--hover-color": "#eee",
-                }
-            }
-        )
-        if selected == "Analytics":
-            switch_page("Analytics")
-        if selected == "Contact":
-            switch_page("Contact")
-
-# Function to load and encode the image
-def img_to_base64(img_path):
-    with open(img_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
-
-# Path to your image
-img_path = "app/images/1177_logo.png"
-
-# Encode the image
-encoded_img = img_to_base64(img_path)
-
-st.header("Ask1177 :pill: ", divider="gray")
-
-# image = Image.open('path/to/your/image.png')
-# st.image(image, width=200)
-
-
-st.divider()
-st.caption("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.")
-st.divider()
-
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
-
-# Configure the Gemini API
-genai.configure(api_key=gemini_key)
-model = genai.GenerativeModel('gemini-1.5-pro')
-
-number_of_files = 1 #509 to use all
+st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
+number_of_files = 1  # 509 to use all
 number_of_vector_results = 3
 
 # Typing effect
@@ -83,6 +32,11 @@ def typing_effect(text, delay=0.05):
         time.sleep(delay)
 
     placeholder.markdown(text)
+
+def load_avatar(image_path, size=(40, 40)):
+    img = Image.open(image_path)
+    img = img.resize(size)
+    return img
 
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
@@ -147,6 +101,36 @@ def create_chroma_db():
     
     return db
 
+def load_logo(image_path, width=150):
+    img = Image.open(image_path)
+    aspect_ratio = img.height / img.width
+    height = int(width * aspect_ratio)
+    img = img.resize((width, height))
+    return img
+
+load_dotenv()
+gemini_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=gemini_key)
+model = genai.GenerativeModel('gemini-1.5-pro')
+
+# Set up paths
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_large.png")
+collapsed_sidebar_logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_whitebackground.png")
+
+st.sidebar.page_link("app_gemini.py", label="Chat", icon="💬")
+st.sidebar.page_link("pages/contact_form.py", label="Contact", icon="📞")
+
+
+with st.sidebar:
+    st.logo(logo_path, size="large", icon_image=collapsed_sidebar_logo_path)
+    st.title("Ask1177")
+    st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
+
+st.title("Chat with Liv 💬 :pill:")
+st.warning("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
+st.divider() 
+
 # Create or load the ChromaDB
 st.session_state.db = create_chroma_db()
 
@@ -166,7 +150,7 @@ if prompt := st.chat_input("What symptoms do you have?"):
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
         st.markdown(prompt)
 
     try:
@@ -189,7 +173,7 @@ if prompt := st.chat_input("What symptoms do you have?"):
             f"User question: {prompt}"
         ])
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
             typing_effect(response.text)
         
         st.divider()
