@@ -24,7 +24,7 @@ st.divider()
 st.caption("*Disclaimer:* This application was trained on data scraped from 1177.se. The chatbot should assist in getting health advice, but always remember, that it can not replace a doctor. It is a student project and not officially hosted by 1177.se.")
 st.divider()
 
-number_of_files = 50
+number_of_files = 50 #509 to use all
 number_of_vector_results = 3
 
 class GeminiEmbeddingFunction(EmbeddingFunction):
