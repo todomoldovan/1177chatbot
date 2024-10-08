@@ -8,6 +8,7 @@ client = chromadb.Client()
 # Define the collection for storing contacts
 collection = client.get_or_create_collection(name="contacts")
 
+
 # Streamlit page setup
 st.set_page_config(layout="wide")
 st.title("Contact Form")
