@@ -34,6 +34,8 @@ if __name__ == "__main__":
         st.logo(st.session_state.logo_path, size="large", icon_image=st.session_state.collapsed_sidebar_logo_path)
         # default_index = 1 if st.session_state.current_page == "contact_form" else 0
 
+
+        #fancy menu that would be nice to have
         # selected = option_menu(
         #     menu_title=None,
         #     options=["Chat with Liv", "Contact"],

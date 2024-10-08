@@ -121,6 +121,8 @@ collapsed_sidebar_logo_path = os.path.join(parent_dir, "images/1177_logo_selfcre
 with st.sidebar:
     st.logo(logo_path, size="large", icon_image=collapsed_sidebar_logo_path)
 
+
+    #fancy menu that would be nice to have
     # selected = option_menu(
     #     menu_title=None,
     #     options=["Chat with Liv", "Contact"],
