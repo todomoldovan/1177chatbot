@@ -11,6 +11,10 @@ from pypdf import PdfReader
 import requests
 import pandas as pd
 
+st.set_page_config(page_title="Ask1177")
+
+st.markdown(f'<style>{open("app/style.css").read()}</style>', unsafe_allow_html=True)
+
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
 
@@ -18,13 +22,13 @@ gemini_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=gemini_key)
 model = genai.GenerativeModel('gemini-1.5-pro')
 
-st.set_page_config(page_title="Ask1177")
+
 st.title("Ask1177")
 st.divider()
 st.caption("*Disclaimer:* This application was trained on data scraped from 1177.se. The chatbot should assist in getting health advice, but always remember, that it can not replace a doctor. It is a student project and not officially hosted by 1177.se.")
 st.divider()
 
-number_of_files = 50 #509 to use all
+number_of_files = 1 #509 to use all
 number_of_vector_results = 3
 
 class GeminiEmbeddingFunction(EmbeddingFunction):

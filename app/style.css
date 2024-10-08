@@ -1,0 +1,19 @@
+.stApp {
+    background-color: white;
+}
+.stApp > header {
+    background-color: #C02043;
+    color: white;
+}
+.stSidebar .sidebar-content {
+    background-color: #FAEDF0;
+}
+.custom-header {
+    background-color: #C02043;
+    padding: 10px;
+    border-radius: 5px;
+}
+.custom-header h1 {
+    color: white;
+    text-align: center;
+}
