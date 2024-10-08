@@ -25,7 +25,7 @@ model = genai.GenerativeModel('gemini-1.5-pro')
 
 st.title("Ask1177")
 st.divider()
-st.caption("*Disclaimer:* This application was trained on data scraped from 1177.se. The chatbot should assist in getting health advice, but always remember, that it can not replace a doctor. It is a student project and not officially hosted by 1177.se.")
+st.caption("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.")
 st.divider()
 
 number_of_files = 1 #509 to use all
