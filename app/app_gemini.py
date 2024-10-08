@@ -9,6 +9,7 @@ from chromadb import Documents, EmbeddingFunction, Embeddings
 import re
 from pypdf import PdfReader
 import requests
+import pandas as pd
 
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
@@ -58,15 +59,29 @@ def create_chroma_db():
 
     db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
 
-    for i in range(number_of_files):  # Adjust range as needed
-        file_path = f"../scraping/pdf_downloads/child_page_{i+1}.pdf"
+    df = pd.read_csv('../scraping/links_and_pdfs.csv')  # Replace with your actual CSV filename
+    pdf_url_map = dict(zip(df['PDF Filename'], df['URL']))
+
+    def get_title_from_url(url):
+        return url.rstrip('/').split('/')[-1].replace('-', ' ').title()
+
+    for i in range(number_of_files):
+        file_name = f"child_page_{i+1}.pdf"
+        file_path = f"../scraping/pdf_downloads/{file_name}"
         if os.path.exists(file_path):
             text = load_pdf(file_path)
             if not text:
                 print(f"Document {i+1} is empty, skipping...")  
             else:
-                db.add(documents=[text], ids=[str(i)], metadatas=[{"title": "Stomach ache", "url": "https://www.1177.se/sjukdomar--besvar/allergier-och-overkanslighet/celiaki/celiaki/"}])
-                print(f"documents{i+1} was loaded")
+                url = pdf_url_map.get(file_name, "https://www.1177.se")
+                title = get_title_from_url(url)
+                
+                db.add(
+                    documents=[text],
+                    ids=[str(i)],
+                    metadatas=[{"title": title, "url": url}]
+                )
+                print(f"Document {i+1} was loaded. Title: {title}, URL: {url}")
 
     end_time = time.time()
     elapsed_time = end_time - start_time
