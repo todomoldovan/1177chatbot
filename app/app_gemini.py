@@ -59,7 +59,7 @@ def create_chroma_db():
 
     db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
 
-    df = pd.read_csv('../scraping/links_and_pdfs.csv')  # Replace with your actual CSV filename
+    df = pd.read_csv('/scraping/links_and_pdfs.csv')  # Replace with your actual CSV filename
     pdf_url_map = dict(zip(df['PDF Filename'], df['URL']))
 
     def get_title_from_url(url):
@@ -67,7 +67,7 @@ def create_chroma_db():
 
     for i in range(number_of_files):
         file_name = f"child_page_{i+1}.pdf"
-        file_path = f"../scraping/pdf_downloads/{file_name}"
+        file_path = f"/scraping/pdf_downloads/{file_name}"
         if os.path.exists(file_path):
             text = load_pdf(file_path)
             if not text:
