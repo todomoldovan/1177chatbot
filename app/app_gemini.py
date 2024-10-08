@@ -10,6 +10,7 @@ import re
 from pypdf import PdfReader
 import requests
 import pandas as pd
+import google.api_core.exceptions 
 
 st.set_page_config(page_title="Ask1177")
 
@@ -150,13 +151,26 @@ if prompt := st.chat_input("What symptoms do you have?"):
             "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
         })
     
+    except google.api_core.exceptions.InternalServerError as e:
+        # Handle internal server error from Google Generative AI
+        error_message = "An error occured. Please try again later."
+        st.session_state.messages.append({"role": "assistant", "content": error_message})
+        with st.chat_message("assistant"):
+            st.markdown(error_message)
+
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 500:
-            st.error("An internal server error occurred (500). Please try again later.")
-            print(f"500 error: {e}")
-        else:
-            st.error(f"An error occurred: {e}")
-            print(f"Error: {e}")
+        # Catch all HTTP errors
+        error_message = "An error occured. Please try again later."
+        st.session_state.messages.append({"role": "assistant", "content": error_message})
+        with st.chat_message("assistant"):
+            st.markdown(error_message)
+
+    except Exception as e:
+        # Catch any other exceptions
+        error_message = "An error occured. Please try again later."
+        st.session_state.messages.append({"role": "assistant", "content": error_message})
+        with st.chat_message("assistant"):
+            st.markdown(error_message)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
