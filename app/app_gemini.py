@@ -18,14 +18,15 @@ from streamlit_extras.switch_page_button import switch_page
 
 st.set_page_config(page_title="Ask1177", page_icon=":pill:")
 
+
 st.markdown(f'<style>{open("app/style.css").read()}</style>', unsafe_allow_html=True)
 
 def navigation_bar():
     with st.container():
         selected = option_menu(
             menu_title=None,
-            options=["Home", "Upload", "Analytics", 'Settings', 'Contact'],
-            icons=['house', 'cloud-upload', "graph-up-arrow", 'gear', 'phone'],
+            options=["Ask 1177 bot", 'Contact'],
+            icons=['chat', 'phone'],
             menu_icon="cast",
             orientation="horizontal",
             styles={
@@ -35,10 +36,10 @@ def navigation_bar():
                 }
             }
         )
-        if selected == "Analytics":
-            switch_page("Analytics")
         if selected == "Contact":
-            switch_page("Contact")
+            switch_page("contact_form")
+        if selected == "Ask 1177 bot":
+            switch_page("app_gemini")
 
 # Function to load and encode the image
 def img_to_base64(img_path):
@@ -51,6 +52,7 @@ img_path = "app/images/1177_logo.png"
 # Encode the image
 encoded_img = img_to_base64(img_path)
 
+navigation_bar()
 st.header("Ask1177 :pill: ", divider="gray")
 
 # image = Image.open('path/to/your/image.png')
