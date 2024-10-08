@@ -1,46 +1,51 @@
 import streamlit as st
 import chromadb
 import time
+from streamlit_extras.switch_page_button import switch_page
+import os
+from streamlit_option_menu import option_menu
 
-# Initialize ChromaDB client
-client = chromadb.Client()
+def contact_form():
+    st.title("Contact Form")
+    
+    # Create input fields
+    name = st.text_input("Name")
+    email = st.text_input("Email")
+    message = st.text_area("Message")
+    
+    # Create a submit button
+    if st.button("Submit"):
+        if name and email and message:
+            # In a real application, you would process the form data here
+            # For now, we'll just display a success message
+            st.success("Thank you for your message! We'll get back to you soon.")
+            
+            # You could also add code here to send an email or store the message
+        else:
+            st.warning("Please fill out all fields before submitting.")
 
-# Define the collection for storing contacts
-collection = client.get_or_create_collection(name="contacts")
+if __name__ == "__main__":
+    st.session_state.current_page = os.path.basename(__file__).replace(".py", "")
+    st.session_state.parent_dir = os.path.dirname(os.path.abspath(__file__))
+    st.session_state.logo_path = os.path.join(st.session_state.parent_dir, "../images/1177_logo_selfcreated_large.png")
+    st.session_state.collapsed_sidebar_logo_path = os.path.join(st.session_state.parent_dir, "../images/1177_logo_selfcreated_whitebackground.png")
 
-# Streamlit page setup
-st.set_page_config(layout="wide")
-st.title("Contact Form")
+    with st.sidebar:
+        st.logo(st.session_state.logo_path, size="large", icon_image=st.session_state.collapsed_sidebar_logo_path)
+        # default_index = 1 if st.session_state.current_page == "contact_form" else 0
 
-# Initialize session state for the input fields
-if 'name' not in st.session_state:
-    st.session_state.name = ""
-if 'message' not in st.session_state:
-    st.session_state.message = ""
+        # selected = option_menu(
+        #     menu_title=None,
+        #     options=["Chat with Liv", "Contact"],
+        #     icons=["chat-dots", "envelope"],
+        #     menu_icon="cast",
+        #     default_index=0,
+        # )
 
-# Contact form fields
-name = st.text_input("Your Name", value=st.session_state.name, key='name')
-message = st.text_area("Your Message", value=st.session_state.message, key='message')
+        # if selected == "Chat":
+        #     switch_page("app gemini")
 
-if st.button("Send"):
-    if name and message:
-        try:
-            # Store contact information in ChromaDB
-            collection.add(
-                documents=[message],
-                metadatas=[{"name": name}],
-                ids=[name]  # Use name as a unique identifier
-            )
-            st.success("Message sent successfully!")
+        st.title("Ask1177")
+        st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
 
-            # Clear the form fields by resetting session state
-            #st.session_state.name = ""
-            #st.session_state.message = ""
-            time.sleep(2)
-            # Rerun the app to reset the form inputs
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
-    else:
-        st.error("Please fill out all required fields.")
+    contact_form()

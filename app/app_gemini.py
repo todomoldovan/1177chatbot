@@ -118,12 +118,20 @@ parent_dir = os.path.dirname(os.path.abspath(__file__))
 logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_large.png")
 collapsed_sidebar_logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_whitebackground.png")
 
-st.sidebar.page_link("app_gemini.py", label="Chat", icon="💬")
-st.sidebar.page_link("pages/contact_form.py", label="Contact", icon="📞")
-
-
 with st.sidebar:
     st.logo(logo_path, size="large", icon_image=collapsed_sidebar_logo_path)
+
+    # selected = option_menu(
+    #     menu_title=None,
+    #     options=["Chat with Liv", "Contact"],
+    #     icons=["chat-dots", "envelope"],
+    #     menu_icon="cast",
+    #     default_index=0
+    # )
+
+    # if selected == "Contact":
+    #     switch_page("contact form")
+
     st.title("Ask1177")
     st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
 
