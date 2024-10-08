@@ -71,6 +71,19 @@ model = genai.GenerativeModel('gemini-1.5-pro')
 number_of_files = 1 #509 to use all
 number_of_vector_results = 3
 
+# Typing effect
+def typing_effect(text, delay=0.05):
+    """Simulate typing effect."""
+    placeholder = st.empty() 
+    displayed_text = "" 
+
+    for char in text:
+        displayed_text += char 
+        placeholder.markdown(displayed_text, unsafe_allow_html=True)
+        time.sleep(delay)
+
+    placeholder.markdown(text)
+
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -177,12 +190,12 @@ if prompt := st.chat_input("What symptoms do you have?"):
         ])
 
         with st.chat_message("assistant"):
-            st.markdown(response.text)
+            typing_effect(response.text)
         
         st.divider()
         st.markdown("**References:**")
         for i, ref in enumerate(references, 1):
-            st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
+            typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
 
         # Append the assistant's response to the messages
         st.session_state.messages.append({
@@ -195,21 +208,21 @@ if prompt := st.chat_input("What symptoms do you have?"):
         error_message = "An error occured. Please try again later."
         st.session_state.messages.append({"role": "assistant", "content": error_message})
         with st.chat_message("assistant"):
-            st.markdown(error_message)
+            typing_effect(error_message)
 
     except requests.exceptions.HTTPError as e:
         # Catch all HTTP errors
         error_message = "An error occured. Please try again later."
         st.session_state.messages.append({"role": "assistant", "content": error_message})
         with st.chat_message("assistant"):
-            st.markdown(error_message)
+            typing_effect(error_message)
 
     except Exception as e:
         # Catch any other exceptions
         error_message = "An error occured. Please try again later."
         st.session_state.messages.append({"role": "assistant", "content": error_message})
         with st.chat_message("assistant"):
-            st.markdown(error_message)
+            typing_effect(error_message)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
