@@ -1,8 +1,6 @@
 import streamlit as st
 import chromadb
 import time
-from streamlit_option_menu import option_menu
-from streamlit_extras.switch_page_button import switch_page
 
 # Initialize ChromaDB client
 client = chromadb.Client()
@@ -12,30 +10,6 @@ collection = client.get_or_create_collection(name="contacts")
 
 # Streamlit page setup
 st.set_page_config(layout="wide")
-
-def navigation_bar():
-    with st.container():
-        selected = option_menu(
-            menu_title=None,
-            options=["Ask 1177 bot", 'Contact'],
-            icons=['chat', 'phone'],
-            menu_icon="cast",
-            orientation="horizontal",
-            styles={
-                "nav-link": {
-                    "text-align": "left",
-                    "--hover-color": "#eee",
-                }
-            }
-        )
-        if selected == "Contact":
-            switch_page("contact_form")
-        if selected == "Ask 1177 bot":
-            switch_page("app_gemini")
-        
-
-navigation_bar()
-
 st.title("Contact Form")
 
 # Initialize session state for the input fields
