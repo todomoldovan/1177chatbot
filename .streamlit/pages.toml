@@ -1,0 +1,10 @@
+[[pages]]
+path = "app_gemini.py"
+name = "Chat about your symptoms"
+icon = "💊"
+
+
+[[pages]]
+path = "pages/contact_form.py"
+name = "Contact us"
+icon = "📬"

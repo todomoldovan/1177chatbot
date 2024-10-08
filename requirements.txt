@@ -8,3 +8,5 @@ pandas
 Pillow
 streamlit-option-menu
 streamlit-extras
+streamlit-navigation-bar
+st-pages

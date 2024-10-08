@@ -1,6 +1,10 @@
-import google.generativeai as genai
-import os
+
 import streamlit as st
+
+st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
+
+from st_pages import add_page_title, Page
+    
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -12,63 +16,10 @@ import requests
 import pandas as pd
 import google.api_core.exceptions 
 from PIL import Image
-import base64
-from streamlit_option_menu import option_menu
-from streamlit_extras.switch_page_button import switch_page
+import google.generativeai as genai
+import os
 
-st.set_page_config(page_title="Ask1177", page_icon=":pill:")
-
-st.markdown(f'<style>{open("app/style.css").read()}</style>', unsafe_allow_html=True)
-
-def navigation_bar():
-    with st.container():
-        selected = option_menu(
-            menu_title=None,
-            options=["Home", "Upload", "Analytics", 'Settings', 'Contact'],
-            icons=['house', 'cloud-upload', "graph-up-arrow", 'gear', 'phone'],
-            menu_icon="cast",
-            orientation="horizontal",
-            styles={
-                "nav-link": {
-                    "text-align": "left",
-                    "--hover-color": "#eee",
-                }
-            }
-        )
-        if selected == "Analytics":
-            switch_page("Analytics")
-        if selected == "Contact":
-            switch_page("Contact")
-
-# Function to load and encode the image
-def img_to_base64(img_path):
-    with open(img_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
-
-# Path to your image
-img_path = "app/images/1177_logo.png"
-
-# Encode the image
-encoded_img = img_to_base64(img_path)
-
-st.header("Ask1177 :pill: ", divider="gray")
-
-# image = Image.open('path/to/your/image.png')
-# st.image(image, width=200)
-
-
-st.divider()
-st.caption("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.")
-st.divider()
-
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
-
-# Configure the Gemini API
-genai.configure(api_key=gemini_key)
-model = genai.GenerativeModel('gemini-1.5-pro')
-
-number_of_files = 1 #509 to use all
+number_of_files = 1  # 509 to use all
 number_of_vector_results = 3
 
 # Typing effect
@@ -152,84 +103,107 @@ def create_chroma_db():
     
     return db
 
-# Create or load the ChromaDB
-st.session_state.db = create_chroma_db()
+def load_logo(image_path, width=150):
+    img = Image.open(image_path)
+    aspect_ratio = img.height / img.width
+    height = int(width * aspect_ratio)
+    img = img.resize((width, height))
+    return img
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
-# Display chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+load_dotenv()
+gemini_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=gemini_key)
+model = genai.GenerativeModel('gemini-1.5-pro')
 
-# Input prompt from user
-if prompt := st.chat_input("What symptoms do you have?"):
-    start_time = time.time()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} : User asked a question")
+# Set up paths
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_large.png")
+collapsed_sidebar_logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_whitebackground.png")
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+number_of_files = 1  # 509 to use all
+number_of_vector_results = 3
+
+def main():
+
+    current_page = Page("app_gemini.py", "Chat", "💬")
     
-    with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
-        st.markdown(prompt)
+    add_page_title(current_page)
+    st.sidebar.page_link("app_gemini.py", label="Chat", icon="💬")
+    st.sidebar.page_link("pages/contact_form.py", label="Contact", icon="📞")
 
-    try:
-        # Retrieve relevant documents from ChromaDB
-        results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
 
-        context = ""
-        references = []
-        for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
-            context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
-            references.append({
-                'title': metadata['title'],
-                'url': metadata['url']
-        })
+    with st.sidebar:
+        st.logo(logo_path, size="large", icon_image=collapsed_sidebar_logo_path)
+        st.title("Ask1177")
+        st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
 
-        # Generate response using the Gemini API
-        response = model.generate_content([
-            "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
-            f"Context: {context}",
-            f"User question: {prompt}"
-        ])
+    st.title("Chat with Ask1177 💬")
+    st.warning("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
+    st.divider() 
 
-        with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
-            typing_effect(response.text)
-        
-        st.divider()
-        st.markdown("**References:**")
-        for i, ref in enumerate(references, 1):
-            typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
+    st.session_state.db = create_chroma_db()
 
-        # Append the assistant's response to the messages
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
-        })
-    
-    except google.api_core.exceptions.InternalServerError as e:
-        # Handle internal server error from Google Generative AI
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    except requests.exceptions.HTTPError as e:
-        # Catch all HTTP errors
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    except Exception as e:
-        # Catch any other exceptions
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
+    # Input prompt from user
+    if prompt := st.chat_input("What symptoms do you have?"):
+        start_time = time.time()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{timestamp} : User asked a question")
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} : Response generated. Total time: {elapsed_time:.2f} seconds")
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
+            st.markdown(prompt)
+
+        try:
+            results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
+
+            context = ""
+            references = []
+            for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
+                context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
+                references.append({
+                    'title': metadata['title'],
+                    'url': metadata['url']
+                })
+
+            response = model.generate_content([
+                "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
+                f"Context: {context}",
+                f"User question: {prompt}"
+            ])
+
+            with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
+                typing_effect(response.text)
+
+            st.divider()
+            st.markdown("**References:**")
+            for i, ref in enumerate(references, 1):
+                typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
+            })
+
+        except Exception as e:
+            error_message = "An error occurred. Please try again later."
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+            with st.chat_message("assistant"):
+                typing_effect(error_message)
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{timestamp} : Response generated. Total time: {elapsed_time:.2f} seconds")
+
+if __name__ == "__main__":
+    main()
