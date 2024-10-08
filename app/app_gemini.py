@@ -23,6 +23,7 @@ st.caption("*Disclaimer:* This application was trained on data scraped from 1177
 st.divider()
 
 number_of_files = 509
+number_of_vector_results = 3
 
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
@@ -50,13 +51,13 @@ def create_chroma_db():
     existing_collections = chroma_client.list_collections()
     name = "rag_experiment"
 
-    print("all dbs: ", chroma_client.list_collections())
+    #print("all dbs: ", chroma_client.list_collections())
 
     if any(collection.name == name for collection in existing_collections):
         chroma_client.delete_collection(name=name)
         print("------- DELETED DATABASE -------")
 
-    db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction())
+    db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
 
     for i in range(number_of_files):  # Adjust range as needed
         file_path = f"../scraping/pdf_downloads/child_page_{i+1}.pdf"
@@ -65,7 +66,7 @@ def create_chroma_db():
             if not text:
                 print(f"Document {i+1} is empty, skipping...")  
             else:
-                db.add(documents=[text], ids=[str(i)])
+                db.add(documents=[text], ids=[str(i)], metadatas=[{"title": "Stomach ache", "url": "https://www.1177.se/sjukdomar--besvar/allergier-och-overkanslighet/celiaki/celiaki/"}])
                 print(f"documents{i+1} was loaded")
 
     end_time = time.time()
@@ -98,21 +99,38 @@ if prompt := st.chat_input("What symptoms do you have?"):
         st.markdown(prompt)
 
     # Retrieve relevant documents from ChromaDB
-    results = st.session_state.db.query(query_texts=[prompt], n_results=3)
-    context = "\n".join(results['documents'][0])
+    results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
 
-    # Generate response using Google Gemini
+    context = ""
+    references = []
+    for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
+        context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
+        references.append({
+            'title': metadata['title'],
+            'url': metadata['url']
+    })
+
     response = model.generate_content([
-        "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
-        f"Context: {context}",
-        f"User question: {prompt}"
+    "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
+    f"Context: {context}",
+    f"User question: {prompt}"
     ])
-    
+
     with st.chat_message("assistant"):
         st.markdown(response.text)
     
+    st.divider()
+    st.markdown("**References:**")
+    for i, ref in enumerate(references, 1):
+        st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
+
     # Append the assistant's response to the messages
-    st.session_state.messages.append({"role": "assistant", "content": response.text})
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
+    })
+
+    
 
     end_time = time.time()
     elapsed_time = end_time - start_time
