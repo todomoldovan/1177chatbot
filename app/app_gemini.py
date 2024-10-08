@@ -10,14 +10,11 @@ import re
 from pypdf import PdfReader
 import requests
 import pandas as pd
-<<<<<<< HEAD
 import google.api_core.exceptions 
-=======
 from PIL import Image
 import base64
 from streamlit_option_menu import option_menu
 from streamlit_extras.switch_page_button import switch_page
->>>>>>> 5a3f8b0dead67cfb8222b05a0b0b0e214b974680
 
 st.set_page_config(page_title="Ask1177", page_icon=":pill:")
 
