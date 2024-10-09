@@ -9,9 +9,11 @@ The application was trained on symptoms and diseases data from 1177.se. This is 
 3. Create a virtual environment using conda
 4. run ``` pip install -r requirements.txt```
 5. run ``` streamlit run app/Chat.py```
-The creation of the database can take a few minutes so please be patient.
+
+The creation of the database can take a few minutes so please be patient. (Approximately 5 minutes on an M1 Pro machine.)
 
 # Scraping
+Used beautifulsoup4 to scrape HTML content from 1177.se and convert to PDFs.
 
 # Application
-Mainly used this youtube video to build it: https://www.youtube.com/watch?v=dXxQ0LR-3Hg
+Mainly used this tutorial to build the Streamlit interface: https://www.youtube.com/watch?v=dXxQ0LR-3Hg
