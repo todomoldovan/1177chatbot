@@ -1,5 +1,6 @@
 # 1177chatbot
 Final project for 1RT730 Large Language Models and Societal Consequences of Artificial Intelligence at Uppsala University
+
 The application was trained on symptoms and diseases data from 1177.se. This is a student project and not officially hosted by 1177.se.
 
 # Getting started
