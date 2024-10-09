@@ -135,10 +135,10 @@ with st.sidebar:
     #     switch_page("contact form")
 
     st.title("Ask1177")
-    st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
+    st.write("Your health assistant powered by AI. The model was trained using 1177 data from October 2024.")
 
 st.title("Chat with Liv 💬 :pill:")
-st.warning("*Disclaimer:* This application was trained on symptoms and diseased data from 1177.se. The chatbot can assist with getting health advice, but always remember that it can not replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
+st.warning("*Disclaimer:* This application was trained on symptoms and diseases data from 1177.se. The chatbot can assist with getting health advice, but always remember that it cannot replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
 st.divider() 
 
 # Create or load the ChromaDB
