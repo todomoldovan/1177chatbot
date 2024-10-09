@@ -1,43 +1,72 @@
-import google.generativeai as genai
 import os
-import streamlit as st
-from datetime import datetime
 import time
+from datetime import datetime
+from typing import List, Dict
+
+import streamlit as st
+import pandas as pd
 from dotenv import load_dotenv
+from PIL import Image
+import google.generativeai as genai
+import google.api_core.exceptions
+import requests
 import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
-import re
 from pypdf import PdfReader
-import requests
-import pandas as pd
-import google.api_core.exceptions 
-from PIL import Image
+import re
+from langdetect import detect
+from googletrans import Translator
+import logging
 import base64
-from streamlit_option_menu import option_menu
-from streamlit_extras.switch_page_button import switch_page
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Streamlit configuration
 st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
-number_of_files = 1  # 509 to use all
-number_of_vector_results = 3
 
-# Typing effect
-def typing_effect(text, delay=0.05):
-    """Simulate typing effect."""
-    placeholder = st.empty() 
-    displayed_text = "" 
+# Constants
+NUMBER_OF_FILES = 10 #509
+NUMBER_OF_VECTOR_RESULTS = 3
+CACHE_EXPIRATION = 3600  # 1 hour
 
-    for char in text:
-        displayed_text += char 
-        placeholder.markdown(displayed_text, unsafe_allow_html=True)
-        time.sleep(delay)
+# Load environment variables
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-    placeholder.markdown(text)
+# Configure Gemini AI
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-pro')
 
+# Set up paths
+PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_large.png")
+COLLAPSED_SIDEBAR_LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_whitebackground.png")
+
+# Utility functions
 def load_avatar(image_path, size=(40, 40)):
     img = Image.open(image_path)
     img = img.resize(size)
     return img
 
+def load_logo(image_path, width=150):
+    img = Image.open(image_path)
+    aspect_ratio = img.height / img.width
+    height = int(width * aspect_ratio)
+    img = img.resize((width, height))
+    return img
+
+def typing_effect(text, delay=0.05):
+    placeholder = st.empty()
+    displayed_text = ""
+    for char in text:
+        displayed_text += char
+        placeholder.markdown(displayed_text, unsafe_allow_html=True)
+        time.sleep(delay)
+    placeholder.markdown(text)
+
+# ChromaDB related functions
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -66,23 +95,23 @@ def create_chroma_db():
 
     if any(collection.name == name for collection in existing_collections):
         chroma_client.delete_collection(name=name)
-        print("------- DELETED DATABASE -------")
+        logger.info("------- DELETED DATABASE -------")
 
     db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
 
-    df = pd.read_csv('scraping/links_and_pdfs.csv')  # Replace with your actual CSV filename
+    df = pd.read_csv('scraping/links_and_pdfs.csv')
     pdf_url_map = dict(zip(df['PDF Filename'], df['URL']))
 
     def get_title_from_url(url):
         return url.rstrip('/').split('/')[-1].replace('-', ' ').title()
 
-    for i in range(number_of_files):
+    for i in range(NUMBER_OF_FILES):
         file_name = f"child_page_{i+1}.pdf"
         file_path = f"scraping/pdf_downloads/{file_name}"
         if os.path.exists(file_path):
             text = load_pdf(file_path)
             if not text:
-                print(f"Document {i+1} is empty, skipping...")  
+                logger.info(f"Document {i+1} is empty, skipping...")
             else:
                 url = pdf_url_map.get(file_name, "https://www.1177.se")
                 title = get_title_from_url(url)
@@ -92,133 +121,161 @@ def create_chroma_db():
                     ids=[str(i)],
                     metadatas=[{"title": title, "url": url}]
                 )
-                print(f"Document {i+1} was loaded. Title: {title}, URL: {url}")
+                logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}")
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} : All documents loaded. Total time: {elapsed_time:.2f} seconds")
+    logger.info(f"{timestamp} : All documents loaded. Total time: {elapsed_time:.2f} seconds")
     
     return db
 
-def load_logo(image_path, width=150):
-    img = Image.open(image_path)
-    aspect_ratio = img.height / img.width
-    height = int(width * aspect_ratio)
-    img = img.resize((width, height))
-    return img
+# Caching mechanism
+@st.cache_data(ttl=CACHE_EXPIRATION)
+def get_cached_response(query: str) -> str:
+    # Implement caching logic here
+    # For now, we'll just return None to indicate cache miss
+    return None
 
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=gemini_key)
-model = genai.GenerativeModel('gemini-1.5-pro')
-
-# Set up paths
-parent_dir = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_large.png")
-collapsed_sidebar_logo_path = os.path.join(parent_dir, "images/1177_logo_selfcreated_whitebackground.png")
-
-with st.sidebar:
-    st.logo(logo_path, size="large", icon_image=collapsed_sidebar_logo_path)
-
-
-    #fancy menu that would be nice to have
-    # selected = option_menu(
-    #     menu_title=None,
-    #     options=["Chat with Liv", "Contact"],
-    #     icons=["chat-dots", "envelope"],
-    #     menu_icon="cast",
-    #     default_index=0
-    # )
-
-    # if selected == "Contact":
-    #     switch_page("contact form")
-
-    st.title("Ask1177")
-    st.write("Your health assistant powered by AI. The model was trained using 1177 data from October 2024.")
-
-st.title("Chat with Liv 💬 :pill:")
-st.warning("*Disclaimer:* This application was trained on symptoms and diseases data from 1177.se. The chatbot can assist with getting health advice, but always remember that it cannot replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
-st.divider() 
-
-# Create or load the ChromaDB
-st.session_state.db = create_chroma_db()
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Display chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# Input prompt from user
-if prompt := st.chat_input("What symptoms do you have?"):
-    start_time = time.time()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} : User asked a question")
-
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
-        st.markdown(prompt)
-
+# Language detection and translation
+def detect_and_translate(text: str, target_lang: str = 'sv') -> str:
     try:
-        # Retrieve relevant documents from ChromaDB
-        results = st.session_state.db.query(query_texts=[prompt], n_results=number_of_vector_results, include=['documents', 'metadatas'])
-
-        context = ""
-        references = []
-        for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
-            context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
-            references.append({
-                'title': metadata['title'],
-                'url': metadata['url']
-        })
-
-        # Generate response using the Gemini API
-        response = model.generate_content([
-            "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice. At the end of your response, list the titles of the source documents you used, prefixed with [1], [2], etc.",
-            f"Context: {context}",
-            f"User question: {prompt}"
-        ])
-
-        with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
-            typing_effect(response.text)
-        
-        st.divider()
-        st.markdown("**References:**")
-        for i, ref in enumerate(references, 1):
-            typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
-
-        # Append the assistant's response to the messages
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": response.text + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(references, 1))
-        })
-    
-    except google.api_core.exceptions.InternalServerError as e:
-        # Handle internal server error from Google Generative AI
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
-
-    except requests.exceptions.HTTPError as e:
-        # Catch all HTTP errors
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
-
+        detected_lang = detect(text)
+        if detected_lang != target_lang:
+            translator = Translator()
+            return translator.translate(text, dest=target_lang).text
+        return text
     except Exception as e:
-        # Catch any other exceptions
-        error_message = "An error occured. Please try again later."
-        st.session_state.messages.append({"role": "assistant", "content": error_message})
-        with st.chat_message("assistant"):
-            typing_effect(error_message)
+        logger.error(f"Translation error: {e}")
+        return text
 
+# User input validation
+def is_valid_health_query(query: str) -> bool:
+    # Implement more sophisticated validation logic here
+    # For now, we'll just check if the query is not empty
+    return bool(query.strip())
+
+# Enhanced query function
+def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS) -> Dict:
+    start_time = time.time()
+    
+    # Translate query if needed
+    prompt_sv = detect_and_translate(prompt)
+    
+    # Check cache first
+    cached_response = get_cached_response(prompt_sv)
+    if cached_response:
+        return {"response": cached_response, "source": "cache"}
+    
+    # Proceed with database query and AI response generation
+    results = db.query(query_texts=[prompt_sv], n_results=num_results, include=['documents', 'metadatas'])
+
+    context = ""
+    references = []
+    for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
+        context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
+        references.append({
+            'title': metadata['title'],
+            'url': metadata['url']
+        })
+
+    # Generate response using the Gemini API
+    response = model.generate_content([
+        "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
+        f"Context: {context}",
+        f"User question: {prompt_sv}"
+    ])
+    
     end_time = time.time()
-    elapsed_time = end_time - start_time
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} : Response generated. Total time: {elapsed_time:.2f} seconds")
+    logger.info(f"Query processed in {end_time - start_time:.2f} seconds")
+    
+    return {"response": response.text, "source": "ai", "references": references}
+
+# Main Streamlit app
+def main():
+    # Sidebar
+    with st.sidebar:
+        #st.image(load_logo(LOGO_PATH), use_column_width=True)
+        st.logo(load_logo(LOGO_PATH), size="large", icon_image=load_logo(COLLAPSED_SIDEBAR_LOGO_PATH))
+        st.title("Ask1177")
+        st.write("Your health assistant powered by AI. The model has access to data from 1177.se that was fetched in October 2024.")
+        st.divider()
+
+         # Option to clear chat history
+        if st.button("Clear Chat History"):
+            st.session_state.messages = []
+            #st.experimental_rerun()
+
+        # Export chat history
+        if st.button("Export Chat History"):
+            chat_history = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in st.session_state.messages])
+            b64 = base64.b64encode(chat_history.encode()).decode()
+            href = f'<a href="data:text/plain;base64,{b64}" download="chat_history.txt">Download Chat History</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
+    st.title("Chat with Liv 💬 :pill:")
+    st.warning("*Disclaimer:* This application was trained on symptoms and diseases data from 1177.se. The chatbot can assist with getting health advice, but always remember that it cannot replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
+    st.divider()
+
+    # Create or load the ChromaDB
+    st.session_state.db = create_chroma_db()
+
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"], avatar=load_avatar('app/images/user_image.png') if message["role"] == "user" else load_avatar('app/images/liv_chatassistant.png')):
+            st.markdown(message["content"])
+
+    # Chat input
+    if prompt := st.chat_input("What symptoms do you have?"):
+        if not is_valid_health_query(prompt):
+            st.warning("Please ask a valid health-related question.")
+            return
+
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
+            st.markdown(prompt)
+
+        try:
+            response_data = enhanced_query(prompt, st.session_state.db, model)
+
+            with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
+                typing_effect(response_data["response"])
+            
+            st.divider()
+            st.markdown("**References:**")
+            for i, ref in enumerate(response_data["references"], 1):
+                typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
+
+            # Append the assistant's response to the messages
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": response_data["response"] + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1))
+            })
+
+            # Feedback mechanism
+            feedback = st.selectbox("Was this response helpful?", ["", "Yes", "No"])
+            if feedback:
+                # Log or store feedback
+                logger.info(f"User feedback: {feedback}")
+
+        except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
+            error_message = "An error occurred. Please try again later."
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+            with st.chat_message("assistant"):
+                typing_effect(error_message)
+            logger.error(f"API Error: {str(e)}")
+
+        except Exception as e:
+            error_message = "An unexpected error occurred. Please try again later."
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+            with st.chat_message("assistant"):
+                typing_effect(error_message)
+            logger.error(f"Unexpected Error: {str(e)}")
+
+if __name__ == "__main__":
+    main()
