@@ -14,8 +14,6 @@ import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
 from pypdf import PdfReader
 import re
-from langdetect import detect
-from googletrans import Translator
 import logging
 import base64
 
@@ -27,15 +25,13 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 # Constants
-NUMBER_OF_FILES = 10 #509
+NUMBER_OF_FILES = 509 #509
 NUMBER_OF_VECTOR_RESULTS = 3
 CACHE_EXPIRATION = 3600  # 1 hour
 
-# Load environment variables
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-pro')
 
@@ -44,7 +40,6 @@ PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_large.png")
 COLLAPSED_SIDEBAR_LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_whitebackground.png")
 
-# Utility functions
 def load_avatar(image_path, size=(40, 40)):
     img = Image.open(image_path)
     img = img.resize(size)
@@ -65,8 +60,6 @@ def typing_effect(text, delay=0.05):
         placeholder.markdown(displayed_text, unsafe_allow_html=True)
         time.sleep(delay)
     placeholder.markdown(text)
-
-# ChromaDB related functions
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -130,45 +123,10 @@ def create_chroma_db():
     
     return db
 
-# Caching mechanism
-@st.cache_data(ttl=CACHE_EXPIRATION)
-def get_cached_response(query: str) -> str:
-    # Implement caching logic here
-    # For now, we'll just return None to indicate cache miss
-    return None
-
-# Language detection and translation
-def detect_and_translate(text: str, target_lang: str = 'sv') -> str:
-    try:
-        detected_lang = detect(text)
-        if detected_lang != target_lang:
-            translator = Translator()
-            return translator.translate(text, dest=target_lang).text
-        return text
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        return text
-
-# User input validation
-def is_valid_health_query(query: str) -> bool:
-    # Implement more sophisticated validation logic here
-    # For now, we'll just check if the query is not empty
-    return bool(query.strip())
-
-# Enhanced query function
 def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS) -> Dict:
     start_time = time.time()
     
-    # Translate query if needed
-    prompt_sv = detect_and_translate(prompt)
-    
-    # Check cache first
-    cached_response = get_cached_response(prompt_sv)
-    if cached_response:
-        return {"response": cached_response, "source": "cache"}
-    
-    # Proceed with database query and AI response generation
-    results = db.query(query_texts=[prompt_sv], n_results=num_results, include=['documents', 'metadatas'])
+    results = db.query(query_texts=[prompt], n_results=num_results, include=['documents', 'metadatas'])
 
     context = ""
     references = []
@@ -179,11 +137,10 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
             'url': metadata['url']
         })
 
-    # Generate response using the Gemini API
     response = model.generate_content([
         "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
         f"Context: {context}",
-        f"User question: {prompt_sv}"
+        f"User question: {prompt}"
     ])
     
     end_time = time.time()
@@ -191,22 +148,16 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     
     return {"response": response.text, "source": "ai", "references": references}
 
-# Main Streamlit app
 def main():
-    # Sidebar
     with st.sidebar:
-        #st.image(load_logo(LOGO_PATH), use_column_width=True)
         st.logo(load_logo(LOGO_PATH), size="large", icon_image=load_logo(COLLAPSED_SIDEBAR_LOGO_PATH))
         st.title("Ask1177")
         st.write("Your health assistant powered by AI. The model has access to data from 1177.se that was fetched in October 2024.")
         st.divider()
 
-         # Option to clear chat history
         if st.button("Clear Chat History"):
             st.session_state.messages = []
-            #st.experimental_rerun()
 
-        # Export chat history
         if st.button("Export Chat History"):
             chat_history = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in st.session_state.messages])
             b64 = base64.b64encode(chat_history.encode()).decode()
@@ -217,24 +168,16 @@ def main():
     st.warning("*Disclaimer:* This application was trained on symptoms and diseases data from 1177.se. The chatbot can assist with getting health advice, but always remember that it cannot replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
     st.divider()
 
-    # Create or load the ChromaDB
     st.session_state.db = create_chroma_db()
 
-    # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"], avatar=load_avatar('app/images/user_image.png') if message["role"] == "user" else load_avatar('app/images/liv_chatassistant.png')):
             st.markdown(message["content"])
 
-    # Chat input
     if prompt := st.chat_input("What symptoms do you have?"):
-        if not is_valid_health_query(prompt):
-            st.warning("Please ask a valid health-related question.")
-            return
-
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
@@ -251,17 +194,10 @@ def main():
             for i, ref in enumerate(response_data["references"], 1):
                 typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
 
-            # Append the assistant's response to the messages
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": response_data["response"] + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1))
             })
-
-            # Feedback mechanism
-            feedback = st.selectbox("Was this response helpful?", ["", "Yes", "No"])
-            if feedback:
-                # Log or store feedback
-                logger.info(f"User feedback: {feedback}")
 
         except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
             error_message = "An error occurred. Please try again later."

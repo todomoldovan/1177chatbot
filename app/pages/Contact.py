@@ -1,26 +1,41 @@
 import streamlit as st
-import chromadb
-import time
-from streamlit_extras.switch_page_button import switch_page
 import os
-from streamlit_option_menu import option_menu
+import json
+from datetime import datetime
+
+def load_submissions():
+    if os.path.exists("contact_submissions.json"):
+        with open("contact_submissions.json", "r") as f:
+            return json.load(f)
+    return []
+
+def save_submission(name, email, message):
+    submissions = load_submissions()
+    timestamp = datetime.now().isoformat()
+    submission = {
+        "name": name,
+        "email": email,
+        "message": message,
+        "timestamp": timestamp
+    }
+    submissions.append(submission)
+    with open("contact_submissions.json", "w") as f:
+        json.dump(submissions, f, indent=2)
 
 def contact_form():
     st.title("Contact Form")
     
-    # Create input fields
     name = st.text_input("Name")
     email = st.text_input("Email")
     message = st.text_area("Message")
     
-    # Create a submit button
     if st.button("Submit"):
         if name and email and message:
-            # In a real application, you would process the form data here
-            # For now, we'll just display a success message
-            st.success("Thank you for your message! We'll get back to you soon.")
-            
-            # You could also add code here to send an email or store the message
+            try:
+                save_submission(name, email, message)
+                st.success("Thank you for your message! We'll get back to you soon.")
+            except Exception as e:
+                st.error(f"An error occurred while submitting your message: {str(e)}")
         else:
             st.warning("Please fill out all fields before submitting.")
 
@@ -32,20 +47,6 @@ if __name__ == "__main__":
 
     with st.sidebar:
         st.logo(st.session_state.logo_path, size="large", icon_image=st.session_state.collapsed_sidebar_logo_path)
-        # default_index = 1 if st.session_state.current_page == "contact_form" else 0
-
-
-        #fancy menu that would be nice to have
-        # selected = option_menu(
-        #     menu_title=None,
-        #     options=["Chat with Liv", "Contact"],
-        #     icons=["chat-dots", "envelope"],
-        #     menu_icon="cast",
-        #     default_index=0,
-        # )
-
-        # if selected == "Chat":
-        #     switch_page("app gemini")
 
         st.title("Ask1177")
         st.write("Your health assistant powered by AI. This application was trained on symptoms and diseased data from 1177.se. The AI has webpage data from Oktober 2024 to use and reference.")
