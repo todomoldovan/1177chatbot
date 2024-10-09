@@ -53,7 +53,7 @@ def load_logo(image_path, width=150):
     img = img.resize((width, height))
     return img
 
-def typing_effect(text, delay=0.03):
+def typing_effect(text, delay=0.01):
     placeholder = st.empty()
     displayed_text = ""
     for char in text:
