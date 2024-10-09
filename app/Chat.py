@@ -16,6 +16,7 @@ from pypdf import PdfReader
 import re
 import logging
 import base64
+import numpy as np
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,7 @@ st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_sta
 
 # Constants
 NUMBER_OF_FILES = 509 #509
-NUMBER_OF_VECTOR_RESULTS = 3
+NUMBER_OF_VECTOR_RESULTS = 5
 CACHE_EXPIRATION = 3600  # 1 hour
 
 load_dotenv()
@@ -52,7 +53,7 @@ def load_logo(image_path, width=150):
     img = img.resize((width, height))
     return img
 
-def typing_effect(text, delay=0.05):
+def typing_effect(text, delay=0.03):
     placeholder = st.empty()
     displayed_text = ""
     for char in text:
@@ -60,6 +61,7 @@ def typing_effect(text, delay=0.05):
         placeholder.markdown(displayed_text, unsafe_allow_html=True)
         time.sleep(delay)
     placeholder.markdown(text)
+
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -123,20 +125,43 @@ def create_chroma_db():
     
     return db
 
-def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS) -> Dict:
+def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.5) -> Dict:
     start_time = time.time()
     
-    results = db.query(query_texts=[prompt], n_results=num_results, include=['documents', 'metadatas'])
+    prompt_embedding = genai.embed_content(
+        model="models/embedding-001",
+        content=prompt,
+        task_type="retrieval_document",  # Changed from "retrieval_query" to "retrieval_document"
+        title="User query"
+    )["embedding"]
+    
+    results = db.query(
+        query_embeddings=[prompt_embedding],
+        n_results=num_results * 2,  # Fetch more results than needed to filter
+        include=['documents', 'metadatas', 'distances']
+    )
 
+    similarities = [1 - distance for distance in results['distances'][0]]  # Convert distance to similarity
+    
+    # Filter and sort results based on similarity
+    filtered_results = [
+        (doc, meta, sim) 
+        for doc, meta, sim in zip(results['documents'][0], results['metadatas'][0], similarities) 
+        if sim > similarity_threshold
+    ]
+    filtered_results.sort(key=lambda x: x[2], reverse=True)
+    
     context = ""
     references = []
-    for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
+    for doc, metadata, similarity in filtered_results[:num_results]:
         context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
         references.append({
             'title': metadata['title'],
-            'url': metadata['url']
+            'url': metadata['url'],
+            'similarity': similarity
         })
 
+    # Generate response using the Gemini API
     response = model.generate_content([
         "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
         f"Context: {context}",
@@ -192,7 +217,10 @@ def main():
             st.divider()
             st.markdown("**References:**")
             for i, ref in enumerate(response_data["references"], 1):
-                typing_effect(f"[{i}] [{ref['title']}]({ref['url']})")
+                similarity_percentage = f"{ref['similarity'] * 100:.2f}%"
+                st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
+                print(f"Reference {i} similarity: {similarity_percentage}") 
+
 
             st.session_state.messages.append({
                 "role": "assistant", 
