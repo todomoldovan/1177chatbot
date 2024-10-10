@@ -1,22 +1,28 @@
 import os
 import time
 from datetime import datetime
-from typing import List, Dict
+from dotenv import load_dotenv
+import chromadb
+from chromadb import Documents, EmbeddingFunction, Embeddings
+from pypdf import PdfReader
+import base64
 
+from typing import List, Dict
 import streamlit as st
 import pandas as pd
-from dotenv import load_dotenv
+from datetime import datetime
+from typing import List, Dict
+import streamlit as st
+import pandas as pd
 from PIL import Image
 import google.generativeai as genai
 import google.api_core.exceptions
 import requests
-import chromadb
-from chromadb import Documents, EmbeddingFunction, Embeddings
-from pypdf import PdfReader
 import re
+from langdetect import detect
+from googletrans import Translator
 import logging
-import base64
-import numpy as np
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -230,14 +236,14 @@ def main():
         except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
             error_message = "An error occurred. Please try again later."
             st.session_state.messages.append({"role": "assistant", "content": error_message})
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
                 typing_effect(error_message)
             logger.error(f"API Error: {str(e)}")
 
         except Exception as e:
             error_message = "An unexpected error occurred. Please try again later."
             st.session_state.messages.append({"role": "assistant", "content": error_message})
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
                 typing_effect(error_message)
             logger.error(f"Unexpected Error: {str(e)}")
 
