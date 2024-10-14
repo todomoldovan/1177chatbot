@@ -34,7 +34,7 @@ st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_sta
 
 # Constants
 NUMBER_OF_FILES = 509 #509
-NUMBER_OF_VECTOR_RESULTS = 3
+NUMBER_OF_VECTOR_RESULTS = 10
 CACHE_EXPIRATION = 3600  # 1 hour
 
 load_dotenv()
