@@ -23,6 +23,7 @@ from langdetect import detect
 from googletrans import Translator
 import logging
 from collections import OrderedDict
+from deep_translator import GoogleTranslator
 
 
 # Set up logging
@@ -30,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Streamlit configuration
-st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
+st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 # Constants
 NUMBER_OF_FILES = 509 #509
@@ -132,17 +133,42 @@ def create_chroma_db():
     
     return db
 
+def translate_multilingual(text):
+    original_lang = detect(text)
+    try:
+        translated_text = GoogleTranslator(source='auto', target='sv').translate(text)
+        print(f"Translated text: {translated_text}")
+        return translated_text, original_lang 
+    
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return text, original_lang
+
+def translate_back(translated_text, original_lang):
+    if original_lang:
+        try:
+            back_translated_text = GoogleTranslator(source='sv', target=original_lang).translate(translated_text)
+            return back_translated_text
+        except Exception as e:
+            print(f"Back translation error: {e}")
+            return translated_text
+    return translated_text
+  
 def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.3) -> Dict:
     start_time = time.time()
-
     references = []
-    
+
     prompt_embedding = genai.embed_content(
         model="models/embedding-001",
         content=prompt,
         task_type="retrieval_document",
         title="User query"
     )["embedding"]
+    
+    # If prompt_embedding is a list of arrays (2D), extract the first one
+    # if isinstance(prompt_embedding, list) and len(prompt_embedding) > 0:
+    #     prompt_embedding = prompt_embedding[0]  # Take the first embedding
+
     
     results = db.query(
         query_embeddings=[prompt_embedding],
@@ -220,16 +246,18 @@ def main():
             st.markdown(message["content"])
 
     if prompt := st.chat_input("What symptoms do you have?"):
+        translated_text, original_lang = translate_multilingual(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
             st.markdown(prompt)
 
         try:
-            response_data = enhanced_query(prompt, st.session_state.db, model)
+            response_data = enhanced_query(translated_text, st.session_state.db, model)
 
             with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
-                typing_effect(response_data["response"])
+                answer_in_original_lang = translate_back(response_data["response"],original_lang)
+                typing_effect(answer_in_original_lang)
             
             st.divider()
             if response_data["references"]:
@@ -244,7 +272,7 @@ def main():
 
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": response_data["response"] + references_text
+                "content": answer_in_original_lang + references_text
             })
 
         except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
