@@ -3,6 +3,9 @@ import os
 import json
 from datetime import datetime
 
+# Streamlit configuration
+st.set_page_config(page_title="Contact", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
+
 def load_submissions():
     if os.path.exists("contact_submissions.json"):
         with open("contact_submissions.json", "r") as f:
