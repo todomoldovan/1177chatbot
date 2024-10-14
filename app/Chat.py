@@ -22,7 +22,7 @@ import re
 from langdetect import detect
 from googletrans import Translator
 import logging
-from transformers import MBartForConditionalGeneration, MBart50Tokenizer
+from deep_translator import GoogleTranslator
 
 
 # Set up logging
@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 # Constants
-NUMBER_OF_FILES = 10 #509
-NUMBER_OF_VECTOR_RESULTS = 5
+NUMBER_OF_FILES = 5 #509
+NUMBER_OF_VECTOR_RESULTS = 3
 CACHE_EXPIRATION = 3600  # 1 hour
 
 load_dotenv()
@@ -133,32 +133,41 @@ def create_chroma_db():
     return db
 
 
-def translate_multilingual(text, target_lang="sv"):
-    model_name = "facebook/mbart-large-50-many-to-many-mmt"
-    tokenizer = MBart50Tokenizer.from_pretrained(model_name)
-    model = MBartForConditionalGeneration.from_pretrained(model_name)
+def translate_multilingual(text):
+    original_lang = detect(text)
+    try:
+        translated_text = GoogleTranslator(source='auto', target='sv').translate(text)
+        print(f"Translated text: {translated_text}")
+        return translated_text, original_lang 
     
-    # Automatically detect the source language
-    tokenizer.src_lang = tokenizer.lang_code_to_id[tokenizer.lang_code_to_id["language_detect"](text)]
-    
-    # Encode the input text
-    encoded_input = tokenizer(text, return_tensors="pt")
-    
-    # Generate translation
-    generated_tokens = model.generate(**encoded_input, forced_bos_token_id=tokenizer.lang_code_to_id[target_lang])
-    
-    # Decode and return translation
-    return tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return text, original_lang
+
+def translate_back(translated_text, original_lang):
+    if original_lang:
+        try:
+            back_translated_text = GoogleTranslator(source='sv', target=original_lang).translate(translated_text)
+            return back_translated_text
+        except Exception as e:
+            print(f"Back translation error: {e}")
+            return translated_text
+    return translated_text
 
 def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.5) -> Dict:
     start_time = time.time()
-    
+
     prompt_embedding = genai.embed_content(
         model="models/embedding-001",
         content=prompt,
         task_type="retrieval_document",  # Changed from "retrieval_query" to "retrieval_document"
         title="User query"
     )["embedding"]
+    
+    # If prompt_embedding is a list of arrays (2D), extract the first one
+    # if isinstance(prompt_embedding, list) and len(prompt_embedding) > 0:
+    #     prompt_embedding = prompt_embedding[0]  # Take the first embedding
+
     
     results = db.query(
         query_embeddings=[prompt_embedding],
@@ -228,16 +237,18 @@ def main():
             st.markdown(message["content"])
 
     if prompt := st.chat_input("What symptoms do you have?"):
-        st.session_state.messages.append({"role": "user", "content": translate_multilingual(prompt)})
+        translated_text, original_lang = translate_multilingual(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
             st.markdown(prompt)
 
         try:
-            response_data = enhanced_query(translate_multilingual(prompt), st.session_state.db, model)
+            response_data = enhanced_query(translated_text, st.session_state.db, model)
 
             with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
-                typing_effect(response_data["response"])
+                answer_in_original_lang = translate_back(response_data["response"],original_lang)
+                typing_effect(answer_in_original_lang)
             
             st.divider()
             st.markdown("**References:**")
@@ -249,7 +260,7 @@ def main():
 
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": response_data["response"] + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1))
+                "content": answer_in_original_lang + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1))
             })
 
         except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
