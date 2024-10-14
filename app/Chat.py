@@ -22,6 +22,7 @@ import re
 from langdetect import detect
 from googletrans import Translator
 import logging
+from transformers import MBartForConditionalGeneration, MBart50Tokenizer
 
 
 # Set up logging
@@ -29,10 +30,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Streamlit configuration
-st.set_page_config(page_title="Ask1177", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
+st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 # Constants
-NUMBER_OF_FILES = 509 #509
+NUMBER_OF_FILES = 10 #509
 NUMBER_OF_VECTOR_RESULTS = 5
 CACHE_EXPIRATION = 3600  # 1 hour
 
@@ -131,6 +132,24 @@ def create_chroma_db():
     
     return db
 
+
+def translate_multilingual(text, target_lang="sv"):
+    model_name = "facebook/mbart-large-50-many-to-many-mmt"
+    tokenizer = MBart50Tokenizer.from_pretrained(model_name)
+    model = MBartForConditionalGeneration.from_pretrained(model_name)
+    
+    # Automatically detect the source language
+    tokenizer.src_lang = tokenizer.lang_code_to_id[tokenizer.lang_code_to_id["language_detect"](text)]
+    
+    # Encode the input text
+    encoded_input = tokenizer(text, return_tensors="pt")
+    
+    # Generate translation
+    generated_tokens = model.generate(**encoded_input, forced_bos_token_id=tokenizer.lang_code_to_id[target_lang])
+    
+    # Decode and return translation
+    return tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
+
 def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.5) -> Dict:
     start_time = time.time()
     
@@ -209,13 +228,13 @@ def main():
             st.markdown(message["content"])
 
     if prompt := st.chat_input("What symptoms do you have?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "user", "content": translate_multilingual(prompt)})
         
         with st.chat_message("user", avatar=load_avatar('app/images/user_image.png')):
             st.markdown(prompt)
 
         try:
-            response_data = enhanced_query(prompt, st.session_state.db, model)
+            response_data = enhanced_query(translate_multilingual(prompt), st.session_state.db, model)
 
             with st.chat_message("assistant", avatar=load_avatar('app/images/liv_chatassistant.png')):
                 typing_effect(response_data["response"])
