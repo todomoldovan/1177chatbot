@@ -22,6 +22,7 @@ import re
 from langdetect import detect
 from googletrans import Translator
 import logging
+from collections import OrderedDict
 from deep_translator import GoogleTranslator
 
 
@@ -33,8 +34,8 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 # Constants
-NUMBER_OF_FILES = 5 #509
-NUMBER_OF_VECTOR_RESULTS = 3
+NUMBER_OF_FILES = 509 #509
+NUMBER_OF_VECTOR_RESULTS = 10
 CACHE_EXPIRATION = 3600  # 1 hour
 
 load_dotenv()
@@ -132,7 +133,6 @@ def create_chroma_db():
     
     return db
 
-
 def translate_multilingual(text):
     original_lang = detect(text)
     try:
@@ -153,14 +153,15 @@ def translate_back(translated_text, original_lang):
             print(f"Back translation error: {e}")
             return translated_text
     return translated_text
-
-def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.5) -> Dict:
+  
+def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.3) -> Dict:
     start_time = time.time()
+    references = []
 
     prompt_embedding = genai.embed_content(
         model="models/embedding-001",
         content=prompt,
-        task_type="retrieval_document",  # Changed from "retrieval_query" to "retrieval_document"
+        task_type="retrieval_document",
         title="User query"
     )["embedding"]
     
@@ -171,13 +172,12 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     
     results = db.query(
         query_embeddings=[prompt_embedding],
-        n_results=num_results * 2,  # Fetch more results than needed to filter
+        n_results=num_results * 2,
         include=['documents', 'metadatas', 'distances']
     )
 
-    similarities = [1 - distance for distance in results['distances'][0]]  # Convert distance to similarity
+    similarities = [1 - distance for distance in results['distances'][0]]
     
-    # Filter and sort results based on similarity
     filtered_results = [
         (doc, meta, sim) 
         for doc, meta, sim in zip(results['documents'][0], results['metadatas'][0], similarities) 
@@ -185,27 +185,36 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     ]
     filtered_results.sort(key=lambda x: x[2], reverse=True)
     
-    context = ""
-    references = []
-    for doc, metadata, similarity in filtered_results[:num_results]:
-        context += f"Title: {metadata['title']}\nContent: {doc}\n\n"
+    context_with_citations = ""
+    for i, (doc, metadata, similarity) in enumerate(filtered_results[:num_results], 1):
+        context_with_citations += f"[{i}] Title: {metadata['title']}\nContent: {doc}\n\n"
         references.append({
             'title': metadata['title'],
             'url': metadata['url'],
             'similarity': similarity
         })
 
-    # Generate response using the Gemini API
+    logger.info(f"Number of references: {len(references)}")
+
     response = model.generate_content([
         "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
-        f"Context: {context}",
+        "Important: For each piece of information you provide, you MUST cite your source using the number in square brackets that precedes the relevant information in the context, e.g. [1]. Only use citations that are provided in the context.",
+        f"Context: {context_with_citations}",
         f"User question: {prompt}"
     ])
+
+    
+    
+    citations = re.findall(r'\[(\d+)\]', response.text)
+    logger.info(f"Citations found in response: {citations}")
+    
+    used_references = [references[int(citation) - 1] for citation in set(citations) if int(citation) <= len(references)]
+    logger.info(f"Used references: {used_references}")
     
     end_time = time.time()
     logger.info(f"Query processed in {end_time - start_time:.2f} seconds")
     
-    return {"response": response.text, "source": "ai", "references": references}
+    return {"response": response.text, "source": "ai", "references": used_references}
 
 def main():
     with st.sidebar:
@@ -251,16 +260,19 @@ def main():
                 typing_effect(answer_in_original_lang)
             
             st.divider()
-            st.markdown("**References:**")
-            for i, ref in enumerate(response_data["references"], 1):
-                similarity_percentage = f"{ref['similarity'] * 100:.2f}%"
-                st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
-                print(f"Reference {i} similarity: {similarity_percentage}") 
+            if response_data["references"]:
+                st.markdown("**References:**")
+                for i, ref in enumerate(response_data["references"], 1):
+                    similarity_percentage = f"{ref['similarity'] * 100:.2f}%"
+                    st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
+            else:
+                st.warning("No references found. This response is generated solely by the AI model without specific source citations.", icon="⚠️")
 
+            references_text = "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1)) if response_data["references"] else "\n\n**Note:** No specific references cited for this response."
 
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": answer_in_original_lang + "\n\n**References:**\n" + "\n".join(f"[{i}] [{ref['title']}]({ref['url']})" for i, ref in enumerate(response_data["references"], 1))
+                "content": answer_in_original_lang + references_text
             })
 
         except (google.api_core.exceptions.InternalServerError, requests.exceptions.HTTPError) as e:
