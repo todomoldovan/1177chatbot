@@ -6,9 +6,10 @@ The application is a multilingual 1177 chatbot with a focus on disease-related q
 # Getting started
 1. Get a Gemini API key here: https://ai.google.dev/gemini-api/docs/api-key
 2. Dowload wkhtmltopdf directly from the website: https://wkhtmltopdf.org/downloads.html
-3. Create a virtual environment using conda
-4. run ``` pip install -r requirements.txt```
-5. run ``` streamlit run app/Chat.py```
+3. run ``` cd 117chatbot```
+4. Create a virtual environment using conda
+5. run ``` pip install -r requirements.txt```
+6. run ``` streamlit run app/Chat.py```
 
 The creation of the database can take a few minutes so please be patient. (Approximately 5 minutes on an M1 Pro machine.)
 
