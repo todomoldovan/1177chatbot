@@ -36,6 +36,8 @@ tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
 NUMBER_OF_FILES = 509 #509 is the maximum number of documents retrieved from 1177.se
 NUMBER_OF_VECTOR_RESULTS = 20
 CACHE_EXPIRATION = 3600  # 1 hour
+RELOAD_DB = True # change to False if you want to use existing embeddings
+
 # Constants Used to handle tokenizer and chunking
 MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 1 # seconds
@@ -154,11 +156,16 @@ def create_chroma_db():
     existing_collections = chroma_client.list_collections()
     name = "rag_experiment"
 
-    if any(collection.name == name for collection in existing_collections):
+    if any(collection.name == name for collection in existing_collections) and RELOAD_DB:
         chroma_client.delete_collection(name=name)
         logger.info("------- DELETED DATABASE -------")
+    
+    existing_collections = chroma_client.list_collections()
+    if any(collection.name == name for collection in existing_collections) and RELOAD_DB==False:
+        logger.info("------- Using existing database -------")
+        return chroma_client.get_collection(name=name, embedding_function=GeminiEmbeddingFunction())
 
-    db = chroma_client.create_collection(name="rag_experiment", embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
+    db = chroma_client.create_collection(name=name, embedding_function=GeminiEmbeddingFunction(), metadata={"hnsw:space": "cosine"})
 
     df = pd.read_csv('scraping/links_and_pdfs.csv')
     pdf_url_map = dict(zip(df['PDF Filename'], df['URL']))
