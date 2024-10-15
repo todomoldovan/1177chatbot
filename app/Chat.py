@@ -24,6 +24,9 @@ from googletrans import Translator
 import logging
 from collections import OrderedDict
 from deep_translator import GoogleTranslator
+from transformers import AutoTokenizer
+
+import random
 
 
 # Set up logging
@@ -33,16 +36,26 @@ logger = logging.getLogger(__name__)
 # Streamlit configuration
 st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
+#Tokenizer
+tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+
 # Constants
-NUMBER_OF_FILES = 509 #509
-NUMBER_OF_VECTOR_RESULTS = 10
+NUMBER_OF_FILES = 509 #509 is the maximum number of documents retrieved from 1177.se
+NUMBER_OF_VECTOR_RESULTS = 20
 CACHE_EXPIRATION = 3600  # 1 hour
+
+
+# Used to handle tokenizer and chunking
+MAX_RETRIES = 5
+INITIAL_RETRY_DELAY = 1
+MAX_TOKENS = 1000  # Reduced from 500 to ensure we stay within limits
+OVERLAP_TOKENS = 200  # Reduced from 100 to minimize redundancy
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Set up paths
 PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -79,14 +92,56 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
                                    task_type="retrieval_document",
                                    title=title)["embedding"]
 
-def load_pdf(file_path):
+def chunk_text(text: str, max_tokens: int = MAX_TOKENS, overlap_tokens: int = OVERLAP_TOKENS) -> List[str]:
+    tokens = tokenizer.encode(text, add_special_tokens=False, truncation=True, max_length=100000)
+    chunks = []
+    start = 0
+    while start < len(tokens):
+        end = start + max_tokens
+        if end > len(tokens):
+            end = len(tokens)
+        chunk = tokenizer.decode(tokens[start:end], skip_special_tokens=True)
+        if chunk.strip():  # Only add non-empty chunks
+            chunks.append(chunk)
+        start += max_tokens - overlap_tokens
+    return chunks
+
+def load_pdf(file_path: str) -> List[str]:
     reader = PdfReader(file_path)
     text = ""
     for page in reader.pages:
         page_text = page.extract_text()
         page_text = re.sub(r'\s+', ' ', page_text)
         text += page_text + " "
-    return text.strip()
+    text = text.strip()
+    return chunk_text(text)
+
+def retry_with_exponential_backoff(func):
+    def wrapper(*args, **kwargs):
+        retry_delay = INITIAL_RETRY_DELAY
+        for attempt in range(MAX_RETRIES):
+            try:
+                return func(*args, **kwargs)
+            except (google.api_core.exceptions.ResourceExhausted, requests.exceptions.HTTPError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    raise
+                logger.warning(f"API quota exceeded. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2 * (1 + random.random())
+    return wrapper
+
+@retry_with_exponential_backoff
+def embed_content(content):
+    return genai.embed_content(
+        model="models/embedding-001",
+        content=content,
+        task_type="retrieval_document",
+        title="User query"
+    )["embedding"]
+
+@retry_with_exponential_backoff
+def generate_content(prompt):
+    return model.generate_content(prompt)
 
 @st.cache_resource
 def create_chroma_db():
@@ -112,19 +167,20 @@ def create_chroma_db():
         file_name = f"child_page_{i+1}.pdf"
         file_path = f"scraping/pdf_downloads/{file_name}"
         if os.path.exists(file_path):
-            text = load_pdf(file_path)
-            if not text:
+            chunks = load_pdf(file_path)
+            if not chunks:
                 logger.info(f"Document {i+1} is empty, skipping...")
             else:
                 url = pdf_url_map.get(file_name, "https://www.1177.se")
                 title = get_title_from_url(url)
                 
-                db.add(
-                    documents=[text],
-                    ids=[str(i)],
-                    metadatas=[{"title": title, "url": url}]
-                )
-                logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}")
+                for j, chunk in enumerate(chunks):
+                    db.add(
+                        documents=[chunk],
+                        ids=[f"{i}-{j}"],
+                        metadatas=[{"title": title, "url": url, "chunk": j}]
+                    )
+                logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}, Chunks: {len(chunks)}")
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -132,6 +188,7 @@ def create_chroma_db():
     logger.info(f"{timestamp} : All documents loaded. Total time: {elapsed_time:.2f} seconds")
     
     return db
+
 
 def translate_multilingual(text):
     original_lang = detect(text)
@@ -158,17 +215,7 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     start_time = time.time()
     references = []
 
-    prompt_embedding = genai.embed_content(
-        model="models/embedding-001",
-        content=prompt,
-        task_type="retrieval_document",
-        title="User query"
-    )["embedding"]
-    
-    # If prompt_embedding is a list of arrays (2D), extract the first one
-    # if isinstance(prompt_embedding, list) and len(prompt_embedding) > 0:
-    #     prompt_embedding = prompt_embedding[0]  # Take the first embedding
-
+    prompt_embedding = embed_content(prompt)
     
     results = db.query(
         query_embeddings=[prompt_embedding],
@@ -196,15 +243,15 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
 
     logger.info(f"Number of references: {len(references)}")
 
-    response = model.generate_content([
-        "You are a knowledgeable resource providing general information about medical conditions based primarily on the content in the context. Explain concepts thoroughly while ensuring clarity for a non-technical audience. When symptoms are provided, please offer a potential diagnosis. Always emphasize that users should consult a healthcare professional for personalized medical advice.",
-        "Important: For each piece of information you provide, you MUST cite your source using the number in square brackets that precedes the relevant information in the context, e.g. [1]. Only use citations that are provided in the context.",
-        f"Context: {context_with_citations}",
-        f"User question: {prompt}"
-    ])
+    response = generate_content([
+    "You are a knowledgeable and detailed medical resource providing comprehensive information about medical conditions based primarily on the content in the context. Explain concepts thoroughly and in-depth, ensuring clarity for a non-technical audience. When symptoms are provided, please offer potential diagnoses and elaborate on each possibility. Provide extensive explanations, including causes, symptoms, potential treatments, and preventive measures when applicable.",
+    "Important: For each piece of information you provide, you MUST cite your source using the number in square brackets that precedes the relevant information in the context, e.g. [1]. Only use citations that are provided in the context.",
+    "Aim to provide a detailed response of at least 200-300 words, covering multiple aspects of the query. Include relevant medical terminology, but always explain it in layman's terms.",
+    "Always emphasize that users should consult a healthcare professional for personalized medical advice, and explain why professional medical consultation is important in the given context.",
+    f"Context: {context_with_citations}",
+    f"User question: {prompt}"
+])
 
-    
-    
     citations = re.findall(r'\[(\d+)\]', response.text)
     logger.info(f"Citations found in response: {citations}")
     
@@ -215,6 +262,7 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     logger.info(f"Query processed in {end_time - start_time:.2f} seconds")
     
     return {"response": response.text, "source": "ai", "references": used_references}
+
 
 def main():
     with st.sidebar:
