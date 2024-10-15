@@ -9,6 +9,7 @@ The application is a multilingual 1177 chatbot with a focus on disease-related q
 3. run ```pip install -r requirements.txt```
 4. then run ```streamlit run app/Chat.py```
 5. Wait for approximately 23 minutes to load all 509 documents, you can also decrease the documents used by editing the Chat.py file constants at the top of the file. One of the first document is this webpage about celiaki, so you can ask about any content on the page (suggest to ask about symptoms): https://www.1177.se/Vastra-Gotaland/sjukdomar--besvar/allergier-och-overkanslighet/celiaki/celiaki/
+6. If you do not wish to re-embed all documents into the DB at each rerun of the application, set the constant ```RELOAD_DB``` to False. 
 
 **We have used the same instructions on a new virual environment and it works.** 
 (Reach out to us if you would however somehow happen to get any unexpected problems)
