@@ -6,11 +6,6 @@ import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
 from pypdf import PdfReader
 import base64
-
-from typing import List, Dict
-import streamlit as st
-import pandas as pd
-from datetime import datetime
 from typing import List, Dict
 import streamlit as st
 import pandas as pd
@@ -25,15 +20,13 @@ import logging
 from collections import OrderedDict
 from deep_translator import GoogleTranslator
 from transformers import AutoTokenizer
-
 import random
 
-
-# Set up logging
+# Enable logging 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Streamlit configuration
+# Set config for Streamlit
 st.set_page_config(page_title="Chat with Liv", page_icon=":pill:", initial_sidebar_state="auto", layout="wide")
 
 #Tokenizer
@@ -43,21 +36,19 @@ tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
 NUMBER_OF_FILES = 509 #509 is the maximum number of documents retrieved from 1177.se
 NUMBER_OF_VECTOR_RESULTS = 20
 CACHE_EXPIRATION = 3600  # 1 hour
-
-
-# Used to handle tokenizer and chunking
+# Constants Used to handle tokenizer and chunking
 MAX_RETRIES = 5
-INITIAL_RETRY_DELAY = 1
-MAX_TOKENS = 1000  # Reduced from 500 to ensure we stay within limits
-OVERLAP_TOKENS = 200  # Reduced from 100 to minimize redundancy
+INITIAL_RETRY_DELAY = 1 # seconds
+MAX_TOKENS = 1000 
+OVERLAP_TOKENS = 200
 
+# load environment variables and set up Gemini model
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Set up paths
+# Set up paths for later fetching images such as logo and avatar
 PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_large.png")
 COLLAPSED_SIDEBAR_LOGO_PATH = os.path.join(PARENT_DIR, "images/1177_logo_selfcreated_whitebackground.png")
@@ -67,6 +58,7 @@ def load_avatar(image_path, size=(40, 40)):
     img = img.resize(size)
     return img
 
+# Resizes images to fit
 def load_logo(image_path, width=150):
     img = Image.open(image_path)
     aspect_ratio = img.height / img.width
@@ -74,6 +66,7 @@ def load_logo(image_path, width=150):
     img = img.resize((width, height))
     return img
 
+# Adds a typing effect of the response with 0.01s speed
 def typing_effect(text, delay=0.01):
     placeholder = st.empty()
     displayed_text = ""
@@ -83,6 +76,7 @@ def typing_effect(text, delay=0.01):
         time.sleep(delay)
     placeholder.markdown(text)
 
+# the embedding function 
 class GeminiEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         model = "models/embedding-001"
@@ -91,7 +85,7 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
                                    content=input,
                                    task_type="retrieval_document",
                                    title=title)["embedding"]
-
+    
 def chunk_text(text: str, max_tokens: int = MAX_TOKENS, overlap_tokens: int = OVERLAP_TOKENS) -> List[str]:
     tokens = tokenizer.encode(text, add_special_tokens=False, truncation=True, max_length=100000)
     chunks = []
@@ -116,6 +110,7 @@ def load_pdf(file_path: str) -> List[str]:
     text = text.strip()
     return chunk_text(text)
 
+# The usage of this function is to enable retries until successful run and/or max retries reached
 def retry_with_exponential_backoff(func):
     def wrapper(*args, **kwargs):
         retry_delay = INITIAL_RETRY_DELAY
@@ -130,6 +125,7 @@ def retry_with_exponential_backoff(func):
                 retry_delay *= 2 * (1 + random.random())
     return wrapper
 
+# function to embed the document
 @retry_with_exponential_backoff
 def embed_content(content):
     return genai.embed_content(
@@ -139,10 +135,17 @@ def embed_content(content):
         title="User query"
     )["embedding"]
 
+# function to generate content
 @retry_with_exponential_backoff
 def generate_content(prompt):
     return model.generate_content(prompt)
 
+# This function sets up the DB. 
+# If a DB instance with the name already exists, it will delete the previous DB
+# then it will embed all the documents and use cosine similarity to order the embeddings in the DB
+# It also gets the titles and link of the document, loads the PDF chunks and then embeds them to the DB along with the meta data (Title and Link)
+# It also uses try-except logic as we previously had problems with embedding the chunks to quickly which exhausted the Gemini API
+# At the very end it calculates the time it takes to embed all 509 documents, which takes approx 1419.45s (around 23 min)
 @st.cache_resource
 def create_chroma_db():
     start_time = time.time()
@@ -194,7 +197,7 @@ def create_chroma_db():
                 
                 logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}, Chunks: {len(chunks)}")
         
-        # Add a small delay between processing each file to avoid hitting rate limits
+        # We have a small delay between processing each file to avoid hitting rate limits
         time.sleep(0.1)
 
     end_time = time.time()
@@ -204,7 +207,7 @@ def create_chroma_db():
     
     return db
 
-
+# This function detects the language and translates it to Swedish
 def translate_multilingual(text):
     original_lang = detect(text)
     try:
@@ -216,6 +219,7 @@ def translate_multilingual(text):
         print(f"Translation error: {e}")
         return text, original_lang
 
+# This function translates the response back to the user preferred language
 def translate_back(translated_text, original_lang):
     if original_lang:
         try:
@@ -225,7 +229,12 @@ def translate_back(translated_text, original_lang):
             print(f"Back translation error: {e}")
             return translated_text
     return translated_text
-  
+
+# This function is an important one
+# It gets the similar DB results from the DB
+# It only uses the results that passes the similarity threshold and creates the context from that
+# The LLM then uses the context, that generates the response using the sources
+# Then we create a reference list by assessing which sources the LLM has used
 def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_RESULTS, similarity_threshold: float = 0.3) -> Dict:
     start_time = time.time()
     references = []
@@ -265,7 +274,7 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     "Always emphasize that users should consult a healthcare professional for personalized medical advice, and explain why professional medical consultation is important in the given context.",
     f"Context: {context_with_citations}",
     f"User question: {prompt}"
-])
+    ])
 
     citations = re.findall(r'\[(\d+)\]', response.text)
     logger.info(f"Citations found in response: {citations}")
@@ -280,6 +289,7 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
 
 
 def main():
+    # Creates sidebar
     with st.sidebar:
         st.logo(load_logo(LOGO_PATH), size="large", icon_image=load_logo(COLLAPSED_SIDEBAR_LOGO_PATH))
         st.title("Ask1177")
@@ -295,19 +305,28 @@ def main():
             href = f'<a href="data:text/plain;base64,{b64}" download="chat_history.txt">Download Chat History</a>'
             st.markdown(href, unsafe_allow_html=True)
 
+    # Start of page
     st.title("Chat with Liv 💬 :pill:")
     st.warning("*Disclaimer:* This application was trained on symptoms and diseases data from 1177.se. The chatbot can assist with getting health advice, but always remember that it cannot replace a doctor. This is a student project and not officially hosted by 1177.se.", icon="⚠️")
     st.divider()
 
+    # Create DB
     st.session_state.db = create_chroma_db()
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # Adds the message to the UI, regardless of if it is the user or the LLM, along with their user images
     for message in st.session_state.messages:
         with st.chat_message(message["role"], avatar=load_avatar('app/images/user_image.png') if message["role"] == "user" else load_avatar('app/images/liv_chatassistant.png')):
             st.markdown(message["content"])
 
+    # Here is the main functionality
+    # translates text, appends the prompt to the user
+    # fetches the response
+    # translate response back to original prompted language
+    # streams the response to the UI
+    # appends the messages to the UI and chat history
     if prompt := st.chat_input("What symptoms do you have?"):
         translated_text, original_lang = translate_multilingual(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -326,7 +345,6 @@ def main():
             if response_data["references"]:
                 st.markdown("**References:**")
                 for i, ref in enumerate(response_data["references"], 1):
-                    similarity_percentage = f"{ref['similarity'] * 100:.2f}%"
                     st.markdown(f"[{i}] [{ref['title']}]({ref['url']})")
             else:
                 st.warning("No references found. This response is generated solely by the AI model without specific source citations.", icon="⚠️")
