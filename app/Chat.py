@@ -46,13 +46,14 @@ CACHE_EXPIRATION = 3600  # 1 hour
 
 
 # Used to handle tokenizer and chunking
+MAX_RETRIES = 5
+INITIAL_RETRY_DELAY = 1
 MAX_TOKENS = 1000  # Reduced from 500 to ensure we stay within limits
 OVERLAP_TOKENS = 200  # Reduced from 100 to minimize redundancy
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Set up gemini model
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -115,6 +116,21 @@ def load_pdf(file_path: str) -> List[str]:
     text = text.strip()
     return chunk_text(text)
 
+def retry_with_exponential_backoff(func):
+    def wrapper(*args, **kwargs):
+        retry_delay = INITIAL_RETRY_DELAY
+        for attempt in range(MAX_RETRIES):
+            try:
+                return func(*args, **kwargs)
+            except (google.api_core.exceptions.ResourceExhausted, requests.exceptions.HTTPError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    raise
+                logger.warning(f"API quota exceeded. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2 * (1 + random.random())
+    return wrapper
+
+@retry_with_exponential_backoff
 def embed_content(content):
     return genai.embed_content(
         model="models/embedding-001",
@@ -123,6 +139,7 @@ def embed_content(content):
         title="User query"
     )["embedding"]
 
+@retry_with_exponential_backoff
 def generate_content(prompt):
     return model.generate_content(prompt)
 
@@ -158,12 +175,27 @@ def create_chroma_db():
                 title = get_title_from_url(url)
                 
                 for j, chunk in enumerate(chunks):
-                    db.add(
-                        documents=[chunk],
-                        ids=[f"{i}-{j}"],
-                        metadatas=[{"title": title, "url": url, "chunk": j}]
-                    )
-                logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}, # of Chunks: {len(chunks)}")
+                    retry_count = 0
+                    while retry_count < MAX_RETRIES:
+                        try:
+                            db.add(
+                                documents=[chunk],
+                                ids=[f"{i}-{j}"],
+                                metadatas=[{"title": title, "url": url, "chunk": j}]
+                            )
+                            break
+                        except google.api_core.exceptions.ResourceExhausted:
+                            retry_count += 1
+                            wait_time = (2 ** retry_count) + (random.randint(0, 1000) / 1000)
+                            logger.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
+                            time.sleep(wait_time)
+                    else:
+                        logger.error(f"Failed to add chunk {j} of document {i+1} after {MAX_RETRIES} retries")
+                
+                logger.info(f"Document {i+1} was loaded. Title: {title}, URL: {url}, Chunks: {len(chunks)}")
+        
+        # Add a small delay between processing each file to avoid hitting rate limits
+        time.sleep(0.1)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -234,15 +266,16 @@ def enhanced_query(prompt: str, db, model, num_results: int = NUMBER_OF_VECTOR_R
     f"Context: {context_with_citations}",
     f"User question: {prompt}"
 ])
-    # this code is to list the references used in the response after the response has been given 
+
     citations = re.findall(r'\[(\d+)\]', response.text)
     logger.info(f"Citations found in response: {citations}")
+    
     used_references = [references[int(citation) - 1] for citation in set(citations) if int(citation) <= len(references)]
     logger.info(f"Used references: {used_references}")
     
-    # Time check
     end_time = time.time()
     logger.info(f"Query processed in {end_time - start_time:.2f} seconds")
+    
     return {"response": response.text, "source": "ai", "references": used_references}
 
 

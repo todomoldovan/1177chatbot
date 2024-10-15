@@ -11,3 +11,4 @@ streamlit-extras
 langdetect
 googletrans
 deep_translator
+transformers
