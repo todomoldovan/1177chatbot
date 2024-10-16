@@ -16,8 +16,6 @@ Asking and responding to a user query takes approx 5 seconds.
 **We have used the same instructions on a new virual environment and it works.** 
 (Reach out to us if you would however somehow happen to get any unexpected problems)
 
-The creation of the database can take a few minutes so please be patient. (Approximately 5 minutes on an M1 Pro machine.)
-
 # Architecture
 - Used beautifulsoup4 to scrape HTML content from 1177.se and convert to PDFs
 - Used chromadb as a database to store the files
