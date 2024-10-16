@@ -4,7 +4,7 @@ This is the final project for 1RT730 Large Language Models and Societal Conseque
 The application is a multilingual 1177 chatbot with a focus on disease-related queries and symptoms. Therefore, the application was trained on symptoms and diseases data from 1177.se. This is a student project and not officially hosted by 1177.se.
 
 # Getting started and runnign the application
-1. Get a Gemini API key here: https://ai.google.dev/gemini-api/docs/api-key
+1. Get a Gemini API key here: https://ai.google.dev/gemini-api/docs/api-key and add it to .env_example and rename the file to .env
 2. Create a conda virtual environment with e.g. this Python version (Python 3.9.20) by running ```conda create --name myenv python=3.9.20``` followed by ```conda activate myenv```
 3. Run ```pip install -r requirements.txt```
 4. Then run ```streamlit run app/Chat.py``` to start the application
